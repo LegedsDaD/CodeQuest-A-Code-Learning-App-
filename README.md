@@ -11,8 +11,7 @@
 
 **CodeQuest** is an interactive code-learning web application designed to help users learn programming concepts through guided lessons and hands-on challenges.
 > App Link- https://code-quest-learn.base44.app
-This app was built using **Base44**, an AI-powered app builder that enables the creation of full-stack web applications using natural-language prompts.
-
+> Login required for accessing App
 ---
 
 ## ✨ Features
@@ -22,9 +21,7 @@ This app was built using **Base44**, an AI-powered app builder that enables the 
 - 📊 Progress tracking
 - 💡 Helpful tips and guided learning
 - 🚧 **More Advanced levels coming soon**
-![Uploading image.png…]()
 
-![Uploading image.png…]()
 
 > Additional levels and challenges will be **updated for Advanced stages** to expand learning depth and difficulty.
 
