@@ -1,0 +1,165 @@
+import React, { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
+import { base44 } from '@/api/base44Client';
+import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
+import { createPageUrl } from '@/utils';
+import LessonCard from '../components/game/LessonCard';
+import XPBar from '../components/game/XPBar';
+import { ArrowLeft, Sparkles, BookOpen, Trophy, Zap } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+
+const languageConfig = {
+    python: { name: 'Python', icon: '🐍', color: 'from-emerald-500 to-teal-600' },
+    java: { name: 'Java', icon: '☕', color: 'from-orange-500 to-red-600' },
+    javascript: { name: 'JavaScript', icon: '⚡', color: 'from-yellow-400 to-amber-500' },
+    html: { name: 'HTML', icon: '🌐', color: 'from-rose-500 to-pink-600' },
+    cpp: { name: 'C++', icon: '⚙️', color: 'from-blue-500 to-indigo-600' },
+    typescript: { name: 'TypeScript', icon: '📘', color: 'from-sky-500 to-blue-600' }
+};
+
+export default function LanguagePath() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const language = urlParams.get('lang') || 'python';
+    const config = languageConfig[language] || languageConfig.python;
+
+    const [user, setUser] = useState(null);
+
+    useEffect(() => {
+        base44.auth.me().then(setUser).catch(() => {});
+    }, []);
+
+    const { data: userProgress } = useQuery({
+        queryKey: ['userProgress', user?.email],
+        queryFn: async () => {
+            if (!user?.email) return null;
+            const progress = await base44.entities.UserProgress.filter({ user_email: user.email });
+            return progress[0] || null;
+        },
+        enabled: !!user?.email
+    });
+
+    const { data: lessons = [], isLoading } = useQuery({
+        queryKey: ['lessons', language],
+        queryFn: async () => {
+            const allLessons = await base44.entities.Lesson.filter({ language }, 'order');
+            return allLessons;
+        }
+    });
+
+    const completedCount = lessons.filter(l => 
+        userProgress?.completed_lessons?.includes(l.id)
+    ).length;
+
+    const totalXP = lessons.reduce((sum, l) => sum + (l.xp_reward || 10), 0);
+    const earnedXP = lessons
+        .filter(l => userProgress?.completed_lessons?.includes(l.id))
+        .reduce((sum, l) => sum + (l.xp_reward || 10), 0);
+
+    return (
+        <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+            {/* Header */}
+            <div className={`relative overflow-hidden bg-gradient-to-r ${config.color} py-12`}>
+                <div className="absolute inset-0 opacity-20">
+                    <div className="absolute right-10 top-0 text-[150px]">{config.icon}</div>
+                </div>
+                
+                <div className="relative max-w-5xl mx-auto px-4 sm:px-6">
+                    <Link to={createPageUrl('Home')}>
+                        <Button variant="ghost" className="text-white/80 hover:text-white hover:bg-white/10 mb-4">
+                            <ArrowLeft className="w-4 h-4 mr-2" />
+                            Back to Dashboard
+                        </Button>
+                    </Link>
+
+                    <div className="flex items-center gap-4 mb-6">
+                        <span className="text-5xl">{config.icon}</span>
+                        <div>
+                            <h1 className="text-3xl md:text-4xl font-bold text-white mb-2">
+                                {config.name} Path
+                            </h1>
+                            <p className="text-white/80">
+                                Master {config.name} through interactive challenges
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Progress Stats */}
+                    <div className="grid grid-cols-3 gap-4 mt-8">
+                        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 text-center">
+                            <BookOpen className="w-6 h-6 text-white mx-auto mb-2" />
+                            <p className="text-2xl font-bold text-white">{completedCount}/{lessons.length}</p>
+                            <p className="text-white/70 text-sm">Lessons</p>
+                        </div>
+                        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 text-center">
+                            <Zap className="w-6 h-6 text-white mx-auto mb-2" />
+                            <p className="text-2xl font-bold text-white">{earnedXP}/{totalXP}</p>
+                            <p className="text-white/70 text-sm">XP Earned</p>
+                        </div>
+                        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 text-center">
+                            <Trophy className="w-6 h-6 text-white mx-auto mb-2" />
+                            <p className="text-2xl font-bold text-white">
+                                {lessons.length > 0 ? Math.round((completedCount / lessons.length) * 100) : 0}%
+                            </p>
+                            <p className="text-white/70 text-sm">Complete</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* XP Bar */}
+            {user && userProgress && (
+                <div className="max-w-5xl mx-auto px-4 sm:px-6 -mt-6 relative z-10">
+                    <XPBar 
+                        xp={userProgress.xp || 0}
+                        level={userProgress.level || 1}
+                        streak={userProgress.current_streak || 0}
+                    />
+                </div>
+            )}
+
+            {/* Lessons List */}
+            <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10">
+                <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+                    <Sparkles className="w-5 h-5 text-violet-400" />
+                    Learning Path
+                </h2>
+
+                {isLoading ? (
+                    <div className="space-y-4">
+                        {[1,2,3,4,5].map(i => (
+                            <Skeleton key={i} className="h-24 w-full rounded-2xl" />
+                        ))}
+                    </div>
+                ) : lessons.length === 0 ? (
+                    <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-10 text-center">
+                        <div className="text-6xl mb-4">{config.icon}</div>
+                        <h3 className="text-xl font-semibold text-white mb-2">Coming Soon!</h3>
+                        <p className="text-slate-400">
+                            We're working on amazing {config.name} lessons. Check back soon!
+                        </p>
+                    </div>
+                ) : (
+                    <div className="space-y-4">
+                        {lessons.map((lesson, idx) => {
+                            const isCompleted = userProgress?.completed_lessons?.includes(lesson.id);
+                            const isLocked = idx > 0 && !userProgress?.completed_lessons?.includes(lessons[idx - 1]?.id) && !isCompleted;
+
+                            return (
+                                <LessonCard
+                                    key={lesson.id}
+                                    lesson={lesson}
+                                    index={idx}
+                                    isCompleted={isCompleted}
+                                    isLocked={isLocked}
+                                    language={language}
+                                />
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}

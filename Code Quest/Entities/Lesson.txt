@@ -1,0 +1,64 @@
+{
+  "name": "Lesson",
+  "type": "object",
+  "properties": {
+    "language": {
+      "type": "string",
+      "enum": [
+        "python",
+        "java",
+        "javascript",
+        "html",
+        "cpp",
+        "typescript"
+      ]
+    },
+    "title": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "order": {
+      "type": "number"
+    },
+    "difficulty": {
+      "type": "string",
+      "enum": [
+        "beginner",
+        "intermediate",
+        "advanced"
+      ]
+    },
+    "xp_reward": {
+      "type": "number",
+      "default": 10
+    },
+    "content": {
+      "type": "string",
+      "description": "Lesson theory in markdown"
+    },
+    "challenge_prompt": {
+      "type": "string",
+      "description": "The coding challenge description"
+    },
+    "expected_output": {
+      "type": "string",
+      "description": "Expected output or behavior"
+    },
+    "hints": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "starter_code": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "language",
+    "title",
+    "order"
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "name": "CodeSubmission",
+  "type": "object",
+  "properties": {
+    "user_email": {
+      "type": "string"
+    },
+    "lesson_id": {
+      "type": "string"
+    },
+    "language": {
+      "type": "string"
+    },
+    "code": {
+      "type": "string"
+    },
+    "is_correct": {
+      "type": "boolean"
+    },
+    "feedback": {
+      "type": "string"
+    },
+    "attempts": {
+      "type": "number",
+      "default": 1
+    }
+  },
+  "required": [
+    "user_email",
+    "lesson_id",
+    "code"
+  ]
+}

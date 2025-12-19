@@ -1,0 +1,48 @@
+{
+  "name": "UserProgress",
+  "type": "object",
+  "properties": {
+    "user_email": {
+      "type": "string",
+      "description": "User's email"
+    },
+    "xp": {
+      "type": "number",
+      "default": 0,
+      "description": "Experience points"
+    },
+    "level": {
+      "type": "number",
+      "default": 1
+    },
+    "current_streak": {
+      "type": "number",
+      "default": 0
+    },
+    "longest_streak": {
+      "type": "number",
+      "default": 0
+    },
+    "last_activity_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "completed_lessons": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "badges": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    }
+  },
+  "required": [
+    "user_email"
+  ]
+}

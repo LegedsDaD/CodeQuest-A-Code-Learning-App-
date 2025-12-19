@@ -1,0 +1,294 @@
+import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Play, RotateCcw, Lightbulb, CheckCircle2, XCircle, Loader2, Sparkles, Brain } from 'lucide-react';
+import { base44 } from '@/api/base44Client';
+
+export default function CodeEditor({ 
+    starterCode = '', 
+    language = 'python',
+    onSubmit,
+    isLoading = false,
+    feedback = null,
+    hints = []
+}) {
+    const [code, setCode] = useState(starterCode);
+    const [showHints, setShowHints] = useState(false);
+    const [currentHintIndex, setCurrentHintIndex] = useState(0);
+    const [explanation, setExplanation] = useState(null);
+    const [isExplaining, setIsExplaining] = useState(false);
+
+    const handleReset = () => {
+        setCode(starterCode);
+    };
+
+    const handleShowHint = () => {
+        if (!showHints) {
+            setShowHints(true);
+        } else if (currentHintIndex < hints.length - 1) {
+            setCurrentHintIndex(prev => prev + 1);
+        }
+    };
+
+    const handleExplainCode = async () => {
+        if (!code.trim()) return;
+        
+        setIsExplaining(true);
+        setExplanation(null);
+        
+        try {
+            const result = await base44.integrations.Core.InvokeLLM({
+                prompt: `You are a friendly coding teacher. Explain this ${language} code to a beginner in a clear, encouraging way.
+
+CODE:
+\`\`\`${language}
+${code}
+\`\`\`
+
+Provide:
+1. What the code does (overview)
+2. Line-by-line explanation (if needed)
+3. Key concepts used
+4. Any suggestions for improvement (optional)
+
+Be concise but educational. Use simple language.`,
+                response_json_schema: {
+                    type: "object",
+                    properties: {
+                        overview: { type: "string" },
+                        explanation: { type: "string" },
+                        concepts: { type: "array", items: { type: "string" } },
+                        suggestions: { type: "string" }
+                    },
+                    required: ["overview", "explanation"]
+                }
+            });
+            
+            setExplanation(result);
+        } catch (error) {
+            setExplanation({
+                overview: "Unable to explain code",
+                explanation: "There was an error analyzing your code. Please try again.",
+                concepts: [],
+                suggestions: ""
+            });
+        } finally {
+            setIsExplaining(false);
+        }
+    };
+
+    const languageLabels = {
+        python: 'Python',
+        java: 'Java',
+        javascript: 'JavaScript',
+        html: 'HTML',
+        cpp: 'C++',
+        typescript: 'TypeScript'
+    };
+
+    return (
+        <div className="bg-slate-900 rounded-2xl overflow-hidden border border-slate-700/50 shadow-2xl">
+            {/* Header */}
+            <div className="bg-slate-800/50 px-4 py-3 flex items-center justify-between border-b border-slate-700/50">
+                <div className="flex items-center gap-3">
+                    <div className="flex gap-1.5">
+                        <div className="w-3 h-3 rounded-full bg-red-500" />
+                        <div className="w-3 h-3 rounded-full bg-yellow-500" />
+                        <div className="w-3 h-3 rounded-full bg-green-500" />
+                    </div>
+                    <span className="text-slate-400 text-sm font-mono">{languageLabels[language]}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleReset}
+                        className="text-slate-400 hover:text-white hover:bg-slate-700"
+                    >
+                        <RotateCcw className="w-4 h-4 mr-1" />
+                        Reset
+                    </Button>
+                    {hints.length > 0 && (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleShowHint}
+                            className="text-amber-400 hover:text-amber-300 hover:bg-slate-700"
+                        >
+                            <Lightbulb className="w-4 h-4 mr-1" />
+                            Hint {showHints ? `(${currentHintIndex + 1}/${hints.length})` : ''}
+                        </Button>
+                    )}
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleExplainCode}
+                        disabled={!code.trim() || isExplaining}
+                        className="text-violet-400 hover:text-violet-300 hover:bg-slate-700"
+                    >
+                        {isExplaining ? (
+                            <>
+                                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                                Analyzing...
+                            </>
+                        ) : (
+                            <>
+                                <Brain className="w-4 h-4 mr-1" />
+                                Explain Code
+                            </>
+                        )}
+                    </Button>
+                </div>
+            </div>
+
+            {/* Hints Area */}
+            <AnimatePresence>
+                {showHints && hints.length > 0 && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="bg-amber-500/10 border-b border-amber-500/30"
+                    >
+                        <div className="px-4 py-3 flex items-start gap-2">
+                            <Lightbulb className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" />
+                            <p className="text-amber-200 text-sm">{hints[currentHintIndex]}</p>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Code Explanation Area */}
+            <AnimatePresence>
+                {explanation && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="bg-violet-500/10 border-b border-violet-500/30 max-h-80 overflow-y-auto"
+                    >
+                        <div className="px-4 py-4">
+                            <div className="flex items-center gap-2 mb-3">
+                                <Brain className="w-5 h-5 text-violet-400" />
+                                <h3 className="text-violet-300 font-semibold">AI Code Explanation</h3>
+                                <button 
+                                    onClick={() => setExplanation(null)}
+                                    className="ml-auto text-violet-400 hover:text-violet-300 text-xs"
+                                >
+                                    ✕ Close
+                                </button>
+                            </div>
+                            
+                            <div className="space-y-3">
+                                <div>
+                                    <p className="text-violet-300 text-sm font-medium mb-1">Overview:</p>
+                                    <p className="text-violet-100 text-sm">{explanation.overview}</p>
+                                </div>
+                                
+                                <div>
+                                    <p className="text-violet-300 text-sm font-medium mb-1">Explanation:</p>
+                                    <p className="text-violet-100 text-sm whitespace-pre-wrap">{explanation.explanation}</p>
+                                </div>
+                                
+                                {explanation.concepts && explanation.concepts.length > 0 && (
+                                    <div>
+                                        <p className="text-violet-300 text-sm font-medium mb-1">Key Concepts:</p>
+                                        <ul className="space-y-1">
+                                            {explanation.concepts.map((concept, idx) => (
+                                                <li key={idx} className="text-violet-100 text-sm flex items-start gap-2">
+                                                    <Sparkles className="w-3 h-3 text-violet-400 mt-1 flex-shrink-0" />
+                                                    {concept}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+                                
+                                {explanation.suggestions && (
+                                    <div>
+                                        <p className="text-violet-300 text-sm font-medium mb-1">Suggestions:</p>
+                                        <p className="text-violet-100 text-sm">{explanation.suggestions}</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Code Area */}
+            <div className="relative">
+                <Textarea
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    className="min-h-[300px] bg-transparent text-emerald-400 font-mono text-sm border-none focus-visible:ring-0 resize-none p-4 leading-relaxed"
+                    placeholder="Write your code here..."
+                    spellCheck={false}
+                />
+            </div>
+
+            {/* Feedback Area */}
+            <AnimatePresence>
+                {feedback && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className={`border-t ${feedback.is_correct ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-red-500/10 border-red-500/30'}`}
+                    >
+                        <div className="px-4 py-4">
+                            <div className="flex items-center gap-2 mb-2">
+                                {feedback.is_correct ? (
+                                    <>
+                                        <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                                        <span className="text-emerald-400 font-semibold">Excellent! 🎉</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <XCircle className="w-5 h-5 text-red-400" />
+                                        <span className="text-red-400 font-semibold">Not quite right</span>
+                                    </>
+                                )}
+                            </div>
+                            <p className={`text-sm ${feedback.is_correct ? 'text-emerald-200' : 'text-red-200'}`}>
+                                {feedback.message}
+                            </p>
+                            {feedback.suggestions && feedback.suggestions.length > 0 && (
+                                <ul className="mt-2 space-y-1">
+                                    {feedback.suggestions.map((suggestion, idx) => (
+                                        <li key={idx} className="text-slate-300 text-sm flex items-start gap-2">
+                                            <Sparkles className="w-3 h-3 text-violet-400 mt-1 flex-shrink-0" />
+                                            {suggestion}
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Submit Button */}
+            <div className="bg-slate-800/50 px-4 py-3 border-t border-slate-700/50">
+                <Button
+                    onClick={() => onSubmit(code)}
+                    disabled={isLoading || !code.trim()}
+                    className="w-full bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-semibold py-6 rounded-xl shadow-lg shadow-violet-500/25"
+                >
+                    {isLoading ? (
+                        <>
+                            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                            Checking your code...
+                        </>
+                    ) : (
+                        <>
+                            <Play className="w-5 h-5 mr-2" />
+                            Run & Check
+                        </>
+                    )}
+                </Button>
+            </div>
+        </div>
+    );
+}

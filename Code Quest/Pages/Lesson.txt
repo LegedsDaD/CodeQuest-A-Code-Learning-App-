@@ -1,0 +1,351 @@
+import React, { useEffect, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { base44 } from '@/api/base44Client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
+import { createPageUrl } from '@/utils';
+import ReactMarkdown from 'react-markdown';
+import CodeEditor from '../components/game/CodeEditor';
+import { ArrowLeft, ArrowRight, BookOpen, Target, Zap, Trophy, Sparkles, PartyPopper } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
+import confetti from 'canvas-confetti';
+
+const languageConfig = {
+    python: { name: 'Python', icon: '🐍', color: 'from-emerald-500 to-teal-600' },
+    java: { name: 'Java', icon: '☕', color: 'from-orange-500 to-red-600' },
+    javascript: { name: 'JavaScript', icon: '⚡', color: 'from-yellow-400 to-amber-500' },
+    html: { name: 'HTML', icon: '🌐', color: 'from-rose-500 to-pink-600' },
+    cpp: { name: 'C++', icon: '⚙️', color: 'from-blue-500 to-indigo-600' },
+    typescript: { name: 'TypeScript', icon: '📘', color: 'from-sky-500 to-blue-600' }
+};
+
+export default function Lesson() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const lessonId = urlParams.get('id');
+    const queryClient = useQueryClient();
+
+    const [user, setUser] = useState(null);
+    const [feedback, setFeedback] = useState(null);
+    const [isChecking, setIsChecking] = useState(false);
+    const [showSuccess, setShowSuccess] = useState(false);
+    const [xpEarned, setXpEarned] = useState(0);
+
+    useEffect(() => {
+        base44.auth.me().then(setUser).catch(() => {});
+    }, []);
+
+    const { data: lesson, isLoading: lessonLoading } = useQuery({
+        queryKey: ['lesson', lessonId],
+        queryFn: async () => {
+            const lessons = await base44.entities.Lesson.filter({ id: lessonId });
+            return lessons[0] || null;
+        },
+        enabled: !!lessonId
+    });
+
+    const { data: userProgress, refetch: refetchProgress } = useQuery({
+        queryKey: ['userProgress', user?.email],
+        queryFn: async () => {
+            if (!user?.email) return null;
+            const progress = await base44.entities.UserProgress.filter({ user_email: user.email });
+            return progress[0] || null;
+        },
+        enabled: !!user?.email
+    });
+
+    const { data: allLessons = [] } = useQuery({
+        queryKey: ['lessons', lesson?.language],
+        queryFn: () => base44.entities.Lesson.filter({ language: lesson.language }, 'order'),
+        enabled: !!lesson?.language
+    });
+
+    const currentIndex = allLessons.findIndex(l => l.id === lessonId);
+    const nextLesson = allLessons[currentIndex + 1];
+    const prevLesson = allLessons[currentIndex - 1];
+
+    const isCompleted = userProgress?.completed_lessons?.includes(lessonId);
+
+    const config = lesson ? (languageConfig[lesson.language] || languageConfig.python) : languageConfig.python;
+
+    const handleCodeSubmit = async (code) => {
+        setIsChecking(true);
+        setFeedback(null);
+
+        try {
+            const result = await base44.integrations.Core.InvokeLLM({
+                prompt: `You are a coding instructor evaluating a student's code submission.
+
+LESSON: ${lesson.title}
+LANGUAGE: ${lesson.language}
+CHALLENGE: ${lesson.challenge_prompt}
+EXPECTED BEHAVIOR/OUTPUT: ${lesson.expected_output}
+
+STUDENT'S CODE:
+\`\`\`${lesson.language}
+${code}
+\`\`\`
+
+Evaluate the code and respond with JSON:
+{
+    "is_correct": boolean,
+    "message": "Friendly, encouraging feedback explaining if correct or what's wrong",
+    "suggestions": ["array", "of", "improvement suggestions if wrong"]
+}
+
+Be encouraging! If wrong, explain WHY and give helpful hints without giving away the answer.`,
+                response_json_schema: {
+                    type: "object",
+                    properties: {
+                        is_correct: { type: "boolean" },
+                        message: { type: "string" },
+                        suggestions: { type: "array", items: { type: "string" } }
+                    },
+                    required: ["is_correct", "message"]
+                }
+            });
+
+            setFeedback(result);
+
+            // If correct and not already completed, update progress
+            if (result.is_correct && !isCompleted && userProgress) {
+                const newXP = (userProgress.xp || 0) + (lesson.xp_reward || 10);
+                const newLevel = Math.floor(newXP / 100) + 1;
+                const newCompleted = [...(userProgress.completed_lessons || []), lessonId];
+
+                // Check for badges
+                const newBadges = [...(userProgress.badges || [])];
+                if (newCompleted.length === 1 && !newBadges.includes('first_code')) {
+                    newBadges.push('first_code');
+                }
+                if (newLevel >= 5 && !newBadges.includes('level_5')) {
+                    newBadges.push('level_5');
+                }
+                if (newLevel >= 10 && !newBadges.includes('level_10')) {
+                    newBadges.push('level_10');
+                }
+
+                await base44.entities.UserProgress.update(userProgress.id, {
+                    xp: newXP,
+                    level: newLevel,
+                    completed_lessons: newCompleted,
+                    badges: newBadges,
+                    last_activity_date: new Date().toISOString().split('T')[0]
+                });
+
+                setXpEarned(lesson.xp_reward || 10);
+                setShowSuccess(true);
+                
+                // Confetti!
+                confetti({
+                    particleCount: 100,
+                    spread: 70,
+                    origin: { y: 0.6 }
+                });
+
+                refetchProgress();
+                queryClient.invalidateQueries(['userProgress']);
+            }
+
+            // Save submission
+            await base44.entities.CodeSubmission.create({
+                user_email: user?.email || 'anonymous',
+                lesson_id: lessonId,
+                language: lesson.language,
+                code,
+                is_correct: result.is_correct,
+                feedback: result.message
+            });
+
+        } catch (error) {
+            setFeedback({
+                is_correct: false,
+                message: "Oops! Something went wrong while checking your code. Please try again.",
+                suggestions: []
+            });
+        } finally {
+            setIsChecking(false);
+        }
+    };
+
+    if (lessonLoading) {
+        return (
+            <div className="min-h-screen bg-slate-950 p-6">
+                <div className="max-w-4xl mx-auto space-y-6">
+                    <Skeleton className="h-12 w-1/2" />
+                    <Skeleton className="h-48 w-full rounded-2xl" />
+                    <Skeleton className="h-96 w-full rounded-2xl" />
+                </div>
+            </div>
+        );
+    }
+
+    if (!lesson) {
+        return (
+            <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+                <div className="text-center">
+                    <h1 className="text-2xl font-bold text-white mb-4">Lesson not found</h1>
+                    <Link to={createPageUrl('Home')}>
+                        <Button>Back to Dashboard</Button>
+                    </Link>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+            {/* Header */}
+            <div className={`relative overflow-hidden bg-gradient-to-r ${config.color} py-8`}>
+                <div className="absolute inset-0 opacity-10">
+                    <div className="absolute right-10 top-0 text-[100px]">{config.icon}</div>
+                </div>
+                
+                <div className="relative max-w-4xl mx-auto px-4 sm:px-6">
+                    <div className="flex items-center justify-between mb-4">
+                        <Link to={createPageUrl(`LanguagePath?lang=${lesson.language}`)}>
+                            <Button variant="ghost" className="text-white/80 hover:text-white hover:bg-white/10">
+                                <ArrowLeft className="w-4 h-4 mr-2" />
+                                Back to Path
+                            </Button>
+                        </Link>
+                        <div className="flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-lg">
+                            <Zap className="w-4 h-4 text-white" />
+                            <span className="text-white font-semibold">+{lesson.xp_reward || 10} XP</span>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                        <span className="text-4xl">{config.icon}</span>
+                        <div>
+                            <p className="text-white/70 text-sm uppercase tracking-wider">
+                                Lesson {currentIndex + 1} • {lesson.difficulty}
+                            </p>
+                            <h1 className="text-2xl md:text-3xl font-bold text-white">
+                                {lesson.title}
+                            </h1>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Content */}
+            <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
+                {/* Theory Section */}
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 mb-8"
+                >
+                    <div className="flex items-center gap-2 mb-4">
+                        <BookOpen className="w-5 h-5 text-violet-400" />
+                        <h2 className="text-lg font-semibold text-white">Learn</h2>
+                    </div>
+                    <div className="prose prose-invert prose-sm max-w-none">
+                        <ReactMarkdown>{lesson.content || lesson.description}</ReactMarkdown>
+                    </div>
+                </motion.div>
+
+                {/* Challenge Section */}
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1 }}
+                    className="mb-8"
+                >
+                    <div className="flex items-center gap-2 mb-4">
+                        <Target className="w-5 h-5 text-amber-400" />
+                        <h2 className="text-lg font-semibold text-white">Challenge</h2>
+                        {isCompleted && (
+                            <span className="bg-emerald-500/20 text-emerald-400 text-xs px-2 py-1 rounded-full flex items-center gap-1">
+                                <Trophy className="w-3 h-3" />
+                                Completed
+                            </span>
+                        )}
+                    </div>
+                    <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4 mb-6">
+                        <p className="text-slate-300">{lesson.challenge_prompt}</p>
+                        {lesson.expected_output && (
+                            <div className="mt-3 pt-3 border-t border-slate-700/50">
+                                <p className="text-slate-500 text-sm">Expected output:</p>
+                                <code className="text-emerald-400 text-sm">{lesson.expected_output}</code>
+                            </div>
+                        )}
+                    </div>
+
+                    <CodeEditor
+                        starterCode={lesson.starter_code || ''}
+                        language={lesson.language}
+                        onSubmit={handleCodeSubmit}
+                        isLoading={isChecking}
+                        feedback={feedback}
+                        hints={lesson.hints || []}
+                    />
+                </motion.div>
+
+                {/* Navigation */}
+                <div className="flex items-center justify-between pt-6 border-t border-slate-800">
+                    {prevLesson ? (
+                        <Link to={createPageUrl(`Lesson?id=${prevLesson.id}`)}>
+                            <Button variant="outline" className="border-slate-700 text-slate-300 hover:bg-slate-800">
+                                <ArrowLeft className="w-4 h-4 mr-2" />
+                                Previous
+                            </Button>
+                        </Link>
+                    ) : <div />}
+
+                    {nextLesson && (
+                        <Link to={createPageUrl(`Lesson?id=${nextLesson.id}`)}>
+                            <Button className="bg-violet-600 hover:bg-violet-500">
+                                Next Lesson
+                                <ArrowRight className="w-4 h-4 ml-2" />
+                            </Button>
+                        </Link>
+                    )}
+                </div>
+            </div>
+
+            {/* Success Modal */}
+            <Dialog open={showSuccess} onOpenChange={setShowSuccess}>
+                <DialogContent className="bg-slate-900 border-slate-700 text-center max-w-md">
+                    <motion.div
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        className="py-6"
+                    >
+                        <div className="text-6xl mb-4">🎉</div>
+                        <h2 className="text-2xl font-bold text-white mb-2">Awesome Job!</h2>
+                        <p className="text-slate-400 mb-6">You completed this lesson and earned XP!</p>
+                        
+                        <div className="bg-gradient-to-r from-violet-500/20 to-purple-500/20 rounded-xl p-6 mb-6">
+                            <div className="flex items-center justify-center gap-2 text-amber-400">
+                                <Zap className="w-6 h-6" />
+                                <span className="text-3xl font-bold">+{xpEarned}</span>
+                                <span className="text-lg">XP</span>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-3">
+                            <Button
+                                variant="outline"
+                                className="flex-1 border-slate-700 text-slate-300"
+                                onClick={() => setShowSuccess(false)}
+                            >
+                                Stay Here
+                            </Button>
+                            {nextLesson && (
+                                <Link to={createPageUrl(`Lesson?id=${nextLesson.id}`)} className="flex-1">
+                                    <Button className="w-full bg-violet-600 hover:bg-violet-500">
+                                        Next Lesson
+                                        <ArrowRight className="w-4 h-4 ml-2" />
+                                    </Button>
+                                </Link>
+                            )}
+                        </div>
+                    </motion.div>
+                </DialogContent>
+            </Dialog>
+        </div>
+    );
+}

@@ -1,0 +1,117 @@
+import React from 'react';
+import { motion } from 'framer-motion';
+import { Link } from 'react-router-dom';
+import { createPageUrl } from '@/utils';
+import { ChevronRight, Lock, CheckCircle2 } from 'lucide-react';
+
+const languageConfig = {
+    python: {
+        name: 'Python',
+        color: 'from-emerald-500 to-teal-600',
+        shadow: 'shadow-emerald-500/20',
+        icon: '🐍',
+        description: 'Perfect for beginners. Learn programming fundamentals.'
+    },
+    java: {
+        name: 'Java',
+        color: 'from-orange-500 to-red-600',
+        shadow: 'shadow-orange-500/20',
+        icon: '☕',
+        description: 'Build powerful applications with object-oriented programming.'
+    },
+    javascript: {
+        name: 'JavaScript',
+        color: 'from-yellow-400 to-amber-500',
+        shadow: 'shadow-yellow-500/20',
+        icon: '⚡',
+        description: 'Create interactive websites and web applications.'
+    },
+    html: {
+        name: 'HTML',
+        color: 'from-rose-500 to-pink-600',
+        shadow: 'shadow-rose-500/20',
+        icon: '🌐',
+        description: 'The foundation of every website. Start here!'
+    },
+    cpp: {
+        name: 'C++',
+        color: 'from-blue-500 to-indigo-600',
+        shadow: 'shadow-blue-500/20',
+        icon: '⚙️',
+        description: 'High-performance programming for games and systems.'
+    },
+    typescript: {
+        name: 'TypeScript',
+        color: 'from-sky-500 to-blue-600',
+        shadow: 'shadow-sky-500/20',
+        icon: '📘',
+        description: 'JavaScript with superpowers. Type-safe development.'
+    }
+};
+
+export default function LanguageCard({ language, progress = 0, isLocked = false, lessonsCompleted = 0, totalLessons = 0 }) {
+    const config = languageConfig[language] || languageConfig.python;
+
+    return (
+        <motion.div
+            whileHover={{ scale: isLocked ? 1 : 1.02, y: isLocked ? 0 : -4 }}
+            whileTap={{ scale: isLocked ? 1 : 0.98 }}
+            className="relative"
+        >
+            <Link 
+                to={isLocked ? '#' : createPageUrl(`LanguagePath?lang=${language}`)}
+                className={`block ${isLocked ? 'cursor-not-allowed' : ''}`}
+            >
+                <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${config.color} p-6 ${config.shadow} shadow-xl ${isLocked ? 'opacity-50' : ''}`}>
+                    {/* Background Pattern */}
+                    <div className="absolute inset-0 opacity-10">
+                        <div className="absolute -right-8 -top-8 text-[120px]">{config.icon}</div>
+                    </div>
+
+                    <div className="relative z-10">
+                        <div className="flex items-start justify-between mb-4">
+                            <div>
+                                <span className="text-4xl mb-2 block">{config.icon}</span>
+                                <h3 className="text-xl font-bold text-white mt-2">{config.name}</h3>
+                            </div>
+                            {isLocked ? (
+                                <div className="bg-white/20 p-2 rounded-lg">
+                                    <Lock className="w-5 h-5 text-white" />
+                                </div>
+                            ) : progress >= 100 ? (
+                                <div className="bg-white/20 p-2 rounded-lg">
+                                    <CheckCircle2 className="w-5 h-5 text-white" />
+                                </div>
+                            ) : (
+                                <div className="bg-white/20 p-2 rounded-lg">
+                                    <ChevronRight className="w-5 h-5 text-white" />
+                                </div>
+                            )}
+                        </div>
+
+                        <p className="text-white/80 text-sm mb-4 leading-relaxed">
+                            {config.description}
+                        </p>
+
+                        {!isLocked && (
+                            <div>
+                                <div className="flex justify-between text-xs text-white/70 mb-1.5">
+                                    <span>{lessonsCompleted} / {totalLessons} lessons</span>
+                                    <span>{Math.round(progress)}%</span>
+                                </div>
+                                <div className="h-2 bg-white/20 rounded-full overflow-hidden">
+                                    <motion.div
+                                        className="h-full bg-white rounded-full"
+                                        initial={{ width: 0 }}
+                                        animate={{ width: `${progress}%` }}
+                                        transition={{ duration: 0.5, delay: 0.2 }}
+                                    />
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </Link>
+        </motion.div>
+    );
+}
